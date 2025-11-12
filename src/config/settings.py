@@ -9,11 +9,12 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # Database configuration
-    # Defaults match the servicenow-ai-poc pgvector backend
+    # Defaults for local development
+    # OpenShift: Credentials come from postgres-pgvector-secret
     postgres_host: str = os.getenv("POSTGRES_HOST", "postgres-pgvector")
     postgres_port: int = int(os.getenv("POSTGRES_PORT", "5432"))
     postgres_user: str = os.getenv("POSTGRES_USER", "raguser")
-    postgres_password: str = os.getenv("POSTGRES_PASSWORD", "ragpass123")
+    postgres_password: str = os.getenv("POSTGRES_PASSWORD", "ragpass123")  # Local dev only
     postgres_db: str = os.getenv("POSTGRES_DB", "ragdb")
 
     # Full-text search configuration

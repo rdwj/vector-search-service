@@ -101,11 +101,11 @@ source .venv/bin/activate
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Configure database connection
+# 3. Configure database connection (use your actual credentials)
 export POSTGRES_HOST=localhost
 export POSTGRES_PORT=5432
 export POSTGRES_USER=raguser
-export POSTGRES_PASSWORD=ragpass123
+export POSTGRES_PASSWORD=YOUR_ACTUAL_PASSWORD
 export POSTGRES_DB=ragdb
 
 # 4. Run the service
@@ -119,13 +119,17 @@ python -m src.main
 
 ```bash
 # Deploy to OpenShift (requires pgvector backend already deployed)
-oc apply -k manifests/ -n servicenow-ai-poc
+./deploy.sh servicenow-ai-poc
 
-# Check deployment
-oc get pods -n servicenow-ai-poc | grep vector-search
+# Monitor deployment
+oc get pods -n servicenow-ai-poc -l app=vector-search-service -w
 
 # Get route URL
 oc get route vector-search-service -n servicenow-ai-poc
+
+# Test health endpoint
+ROUTE=$(oc get route vector-search-service -n servicenow-ai-poc -o jsonpath='{.spec.host}')
+curl https://$ROUTE/api/v1/health
 ```
 
 ## Configuration
@@ -139,7 +143,7 @@ All configuration via environment variables:
 | `POSTGRES_HOST` | `postgres-pgvector` | PostgreSQL hostname |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port |
 | `POSTGRES_USER` | `raguser` | Database user |
-| `POSTGRES_PASSWORD` | `ragpass123` | Database password |
+| `POSTGRES_PASSWORD` | `ragpass123` (local) | Database password. **OpenShift:** Sourced from `postgres-pgvector-secret` (overrides default) |
 | `POSTGRES_DB` | `ragdb` | Database name |
 | `PORT` | `8000` | Service port |
 | `LOG_LEVEL` | `INFO` | Logging level |

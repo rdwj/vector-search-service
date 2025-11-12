@@ -1,0 +1,43 @@
+[allowlist]
+  description = "Project-specific allowlist for false positives"
+
+  # Ignore based on file paths
+  paths = [
+    # Example files
+    '''\/example.*\.(pem|key)$''',
+    '''\/examples\/''',
+    '''\.example$''',
+
+    # Test fixtures
+    '''\/tests?\/fixtures\/''',
+    '''\/test\/.*\.(key|pem)$''',
+
+    # Documentation
+    '''README\.md$''',
+    '''QUICKSTART\.md$''',
+    '''docs\/.*\.md$''',
+
+    # Claude Code directory
+    '''\.claude\/''',
+  ]
+
+  # Ignore based on line content
+  regexes = [
+    # Test/example passwords
+    '''password.*['"]\s*['"]\s*$''',
+    '''password.*Pass123''',
+    '''password.*example''',
+    '''password.*test''',
+
+    # Documentation placeholders
+    '''# Your (private key|certificate|API key|token) here''',
+    '''<your-.*-here>''',
+    '''REPLACE_WITH_YOUR''',
+    '''YOUR_.*_HERE''',
+    '''CHANGEME''',
+    '''INSERT_.*_HERE''',
+
+    # Common placeholder patterns
+    '''(api[_-]?key|token|secret|password).*placeholder''',
+    '''example[_-]?(api[_-]?key|token|secret)''',
+  ]

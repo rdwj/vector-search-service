@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-search-service-code
+  labels:
+    app: vector-search-service
+data:
+  main.py: |
+    from fastapi import FastAPI, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
+    from contextlib import asynccontextmanager
+    import logging
+    import uvicorn
+    import os
+    import sys
+    
+    # Add the app directory to Python path
+    sys.path.insert(0, '/app')
+    
+    from src.config.settings import settings
+    from src.api.health import router as health_router
+    from src.api.documents import router as documents_router
+    from src.api.search import router as search_router
+    from src.api.collections import router as collections_router
+    
+    # Configure logging
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level.upper()),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    
+    from src.db.connection import DatabaseManager
+    from src.core.vector_store import PostgreSQLVectorStore
+    # REMOVED: No longer needed with TF-IDF
+    # from src.core.embedding_service import EmbeddingService
+
+    # Global instances
+    db_manager = None
+    vector_store = None
+    # REMOVED: No longer needed with TF-IDF
+    # embedding_service = None
+    
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """Application lifespan manager"""
+        # REMOVED: No longer needed with TF-IDF - removed embedding_service from global
+        global db_manager, vector_store
+        
+        logger.info(f"Starting {settings.app_name} v{settings.app_version}")
+        
+        try:
+            # Initialize database connection
+            db_manager = DatabaseManager(settings)
+            await db_manager.initialize()
+            app.state.db_manager = db_manager
+            
+            # Initialize vector store
+            vector_store = PostgreSQLVectorStore(db_manager)
+            app.state.vector_store = vector_store
+
+            # REMOVED: No longer needed with TF-IDF
+            # # Initialize embedding service
+            # embedding_service = EmbeddingService(settings)
+            # app.state.embedding_service = embedding_service
+
+            logger.info("Application startup complete")
+            yield
+        except Exception as e:
+            logger.error(f"Application startup failed: {str(e)}")
+            raise
+        finally:
+            logger.info("Shutting down application")
+            if db_manager:
+                await db_manager.close()
+    
+    # Create FastAPI application
+    app = FastAPI(
+        title=settings.app_name,
+        version=settings.app_version,
+        description="A vector search service for ServiceNow RAG",
+        lifespan=lifespan
+    )
+    
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Include routers
+    app.include_router(health_router, prefix="/api/v1", tags=["health"])
+    app.include_router(documents_router, prefix="/api/v1", tags=["documents"])
+    app.include_router(search_router, prefix="/api/v1", tags=["search"])
+    app.include_router(collections_router, prefix="/api/v1", tags=["collections"])
+    
+    @app.get("/")
+    async def root():
+        """Root endpoint"""
+        return {
+            "service": settings.app_name,
+            "version": settings.app_version,
+            "status": "running",
+            "docs_url": "/docs",
+            "health_url": "/api/v1/health"
+        }
+    
+    if __name__ == "__main__":
+        uvicorn.run(
+            "main:app",
+            host=settings.host,
+            port=settings.port,
+            reload=settings.debug,
+            log_level=settings.log_level.lower()
+        )

@@ -1,0 +1,1110 @@
+openapi: 3.0.0
+info:
+  title: Vector Search Service API
+  description: |
+    A vector search service providing semantic search capabilities using PostgreSQL + pgvector.
+    
+    This service provides document ingestion, embedding generation, and similarity search operations
+    designed for integration with Elyra pipelines and other AI workflows.
+    
+    ## Features
+    - Document ingestion with automatic chunking
+    - Semantic similarity search
+    - Batch processing for pipeline integration
+    - Collection management for document organization
+    - Asynchronous job tracking
+    
+    ## Authentication
+    This service uses JWT tokens for authentication. Include the token in the Authorization header:
+    `Authorization: Bearer <token>`
+  version: 1.0.0
+  contact:
+    name: Vector Search Service
+    url: https://github.com/vector-search-service
+    email: support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+  - url: https://vector-search-service.openshift.apps.example.com
+    description: OpenShift deployment
+
+paths:
+  /:
+    get:
+      summary: Root endpoint
+      description: Provides basic service information and health status
+      tags:
+        - service
+      responses:
+        '200':
+          description: Service information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                    example: "vector-search-service"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  status:
+                    type: string
+                    example: "running"
+                  docs_url:
+                    type: string
+                    example: "/docs"
+                  health_url:
+                    type: string
+                    example: "/api/v1/health"
+
+  /api/v1/health:
+    get:
+      summary: Health check
+      description: Returns service health status and component diagnostics
+      tags:
+        - health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/documents/ingest:
+    post:
+      summary: Ingest single document
+      description: |
+        Ingest a single document for embedding and storage.
+        
+        This endpoint processes the document by:
+        1. Splitting it into chunks based on the specified chunk_size
+        2. Generating embeddings for each chunk
+        3. Storing the embeddings in the vector database
+        4. Saving document metadata
+      tags:
+        - documents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentIngestRequest'
+            examples:
+              simple_document:
+                summary: Simple text document
+                value:
+                  content: "This is a sample document for testing the vector search service."
+                  metadata:
+                    source: "test.txt"
+                    type: "text"
+                  collection_id: "default"
+      responses:
+        '200':
+          description: Document ingested successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentIngestResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/documents/batch-ingest:
+    post:
+      summary: Batch ingest documents
+      description: |
+        Ingest multiple documents in batch for embedding and storage.
+        
+        Supports both synchronous and asynchronous processing modes.
+        For large batches (>10 documents), async mode is recommended.
+      tags:
+        - documents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchIngestRequest'
+      responses:
+        '200':
+          description: Batch ingestion started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchIngestResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/documents/{document_id}:
+    get:
+      summary: Get document information
+      description: Retrieve metadata and information about a specific document
+      tags:
+        - documents
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          description: Unique identifier of the document
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Document information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentInfo'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete document
+      description: Delete a document and all its associated embeddings
+      tags:
+        - documents
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          description: Unique identifier of the document to delete
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Document deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  document_id:
+                    type: string
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/search/similarity:
+    post:
+      summary: Semantic similarity search
+      description: |
+        Perform semantic similarity search on document embeddings.
+        
+        This endpoint:
+        1. Generates an embedding for the query text
+        2. Searches for similar embeddings in the vector database
+        3. Returns the most similar documents with scores
+      tags:
+        - search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimilaritySearchRequest'
+            examples:
+              simple_search:
+                summary: Simple text search
+                value:
+                  query: "How to configure the database connection?"
+                  collection_id: "default"
+                  limit: 5
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimilaritySearchResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/search/batch:
+    post:
+      summary: Batch similarity search
+      description: |
+        Perform batch similarity searches for multiple queries.
+        
+        This endpoint is optimized for pipeline operations that need to
+        search for multiple terms efficiently.
+      tags:
+        - search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchSearchRequest'
+      responses:
+        '200':
+          description: Batch search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchSearchResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/search/collections:
+    get:
+      summary: List collections
+      description: List all available collections for searching
+      tags:
+        - search
+      responses:
+        '200':
+          description: List of collections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionListResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/collections:
+    post:
+      summary: Create collection
+      description: Create a new collection for organizing documents
+      tags:
+        - collections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionCreateRequest'
+      responses:
+        '200':
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionCreateResponse'
+        '409':
+          description: Collection already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/collections/{collection_id}:
+    get:
+      summary: Get collection information
+      description: Retrieve detailed information about a specific collection
+      tags:
+        - collections
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          description: Unique identifier of the collection
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Collection information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionInfo'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete collection
+      description: Delete a collection and optionally all its documents
+      tags:
+        - collections
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          description: Unique identifier of the collection to delete
+          schema:
+            type: string
+        - name: force
+          in: query
+          required: false
+          description: Force delete collection even if it contains documents
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Collection deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  collection_id:
+                    type: string
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+                  force_delete:
+                    type: boolean
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Collection contains documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/jobs/{job_id}/status:
+    get:
+      summary: Get job status
+      description: Get the status of an asynchronous job
+      tags:
+        - jobs
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          description: Unique identifier of the job
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatus'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/jobs/{job_id}/results:
+    get:
+      summary: Get job results
+      description: Retrieve the results of a completed job
+      tags:
+        - jobs
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          description: Unique identifier of the job
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                  status:
+                    type: string
+                  results:
+                    type: object
+                  processing_time_ms:
+                    type: integer
+                  completed_at:
+                    type: string
+                    format: date-time
+        '202':
+          description: Job still processing
+        '404':
+          description: Job not found or no results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/jobs/{job_id}:
+    delete:
+      summary: Cancel job
+      description: Cancel a running or queued job
+      tags:
+        - jobs
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          description: Unique identifier of the job to cancel
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job cancelled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  job_id:
+                    type: string
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Job cannot be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    DocumentIngestRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          description: The document content to ingest
+          example: "This is a sample document for testing the vector search service."
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional metadata for the document
+          example:
+            source: "test.txt"
+            type: "text"
+            author: "John Doe"
+        collection_id:
+          type: string
+          description: Collection ID to store the document in
+          default: "default"
+        chunk_size:
+          type: integer
+          description: Size of text chunks for embedding
+          default: 1000
+          minimum: 100
+          maximum: 4000
+        overlap:
+          type: integer
+          description: Overlap between chunks in characters
+          default: 200
+          minimum: 0
+          maximum: 1000
+
+    DocumentIngestResponse:
+      type: object
+      required:
+        - document_id
+        - chunks_created
+        - embedding_count
+        - status
+        - processing_time_ms
+      properties:
+        document_id:
+          type: string
+          format: uuid
+          description: Unique identifier for the ingested document
+        chunks_created:
+          type: integer
+          description: Number of chunks created from the document
+        embedding_count:
+          type: integer
+          description: Number of embeddings generated
+        status:
+          type: string
+          enum: [completed, failed, processing]
+          description: Status of the ingestion process
+        processing_time_ms:
+          type: integer
+          description: Time taken to process the document in milliseconds
+
+    SimilaritySearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: The search query text
+          example: "How to configure the database connection?"
+        collection_id:
+          type: string
+          description: Collection ID to search in
+          default: "default"
+        limit:
+          type: integer
+          description: Maximum number of results to return
+          default: 10
+          minimum: 1
+          maximum: 100
+        min_score:
+          type: number
+          format: float
+          description: Minimum similarity score threshold
+          minimum: 0.0
+          maximum: 1.0
+        metadata_filter:
+          type: object
+          additionalProperties: true
+          description: Metadata filters to apply
+
+    SearchResult:
+      type: object
+      required:
+        - document_id
+        - content
+        - score
+        - metadata
+      properties:
+        document_id:
+          type: string
+          format: uuid
+          description: Unique identifier of the document
+        content:
+          type: string
+          description: The matching content/chunk
+        score:
+          type: number
+          format: float
+          description: Similarity score (0-1)
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Document metadata
+        chunk_index:
+          type: integer
+          description: Index of the chunk within the document
+
+    SimilaritySearchResponse:
+      type: object
+      required:
+        - query
+        - results
+        - total_found
+        - processing_time_ms
+      properties:
+        query:
+          type: string
+          description: The original search query
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResult'
+          description: List of search results
+        total_found:
+          type: integer
+          description: Total number of results found
+        processing_time_ms:
+          type: integer
+          description: Time taken to process the search in milliseconds
+
+    BatchIngestRequest:
+      type: object
+      required:
+        - documents
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentIngestRequest'
+          description: List of documents to ingest
+        collection_id:
+          type: string
+          description: Collection ID to store all documents in
+          default: "default"
+        processing_mode:
+          type: string
+          enum: [sync, async]
+          description: Processing mode
+          default: "async"
+
+    BatchIngestResponse:
+      type: object
+      required:
+        - job_id
+        - documents_queued
+        - status_endpoint
+        - status
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          description: Unique identifier for the batch job
+        documents_queued:
+          type: integer
+          description: Number of documents queued for processing
+        estimated_completion_time:
+          type: string
+          format: date-time
+          description: Estimated completion time
+        status_endpoint:
+          type: string
+          description: Endpoint to check job status
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+          description: Current status of the batch job
+
+    BatchSearchRequest:
+      type: object
+      required:
+        - queries
+      properties:
+        queries:
+          type: array
+          items:
+            type: string
+          description: List of search queries
+        collection_id:
+          type: string
+          description: Collection ID to search in
+          default: "default"
+        limit:
+          type: integer
+          description: Maximum number of results per query
+          default: 10
+          minimum: 1
+          maximum: 100
+        output_format:
+          type: string
+          enum: [json, csv]
+          description: Output format
+          default: "json"
+        metadata_filter:
+          type: object
+          additionalProperties: true
+          description: Metadata filters to apply
+
+    BatchSearchResponse:
+      type: object
+      required:
+        - job_id
+        - queries_processed
+        - results
+        - processing_time_ms
+        - status
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          description: Unique identifier for the batch job
+        queries_processed:
+          type: integer
+          description: Number of queries processed
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SimilaritySearchResponse'
+          description: List of search results for each query
+        processing_time_ms:
+          type: integer
+          description: Total time taken to process all queries
+        status:
+          type: string
+          enum: [completed, failed, processing]
+          description: Status of the batch search
+
+    CollectionCreateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Name of the collection
+          example: "Technical Documentation"
+        description:
+          type: string
+          description: Description of the collection
+          example: "Collection for technical documentation and guides"
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional metadata for the collection
+
+    CollectionInfo:
+      type: object
+      required:
+        - id
+        - name
+        - document_count
+        - embedding_count
+        - created_at
+        - updated_at
+        - metadata
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the collection
+        name:
+          type: string
+          description: Name of the collection
+        description:
+          type: string
+          description: Description of the collection
+        document_count:
+          type: integer
+          description: Number of documents in the collection
+        embedding_count:
+          type: integer
+          description: Number of embeddings in the collection
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Collection metadata
+
+    CollectionCreateResponse:
+      type: object
+      required:
+        - collection_id
+        - name
+        - status
+        - created_at
+      properties:
+        collection_id:
+          type: string
+          description: Unique identifier of the created collection
+        name:
+          type: string
+          description: Name of the collection
+        status:
+          type: string
+          enum: [created, failed]
+          description: Status of the collection creation
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+
+    CollectionListResponse:
+      type: object
+      required:
+        - collections
+        - total_count
+      properties:
+        collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionInfo'
+          description: List of collections
+        total_count:
+          type: integer
+          description: Total number of collections
+
+    DocumentInfo:
+      type: object
+      required:
+        - id
+        - collection_id
+        - content_preview
+        - metadata
+        - chunk_count
+        - embedding_count
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier of the document
+        collection_id:
+          type: string
+          description: Collection ID the document belongs to
+        content_preview:
+          type: string
+          description: Preview of the document content
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Document metadata
+        chunk_count:
+          type: integer
+          description: Number of chunks in the document
+        embedding_count:
+          type: integer
+          description: Number of embeddings generated
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+
+    JobStatus:
+      type: object
+      required:
+        - job_id
+        - status
+        - progress
+        - started_at
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          description: Unique identifier of the job
+        status:
+          type: string
+          enum: [queued, running, completed, failed, cancelled]
+          description: Current status of the job
+        progress:
+          type: number
+          format: float
+          description: Job progress (0-1)
+          minimum: 0.0
+          maximum: 1.0
+        started_at:
+          type: string
+          format: date-time
+          description: Job start timestamp
+        completed_at:
+          type: string
+          format: date-time
+          description: Job completion timestamp
+        error_message:
+          type: string
+          description: Error message if job failed
+        result_url:
+          type: string
+          description: URL to retrieve job results
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - version
+        - service
+        - uptime
+        - components
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          description: Overall service health status
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+        version:
+          type: string
+          description: Service version
+        service:
+          type: string
+          description: Service name
+        uptime:
+          type: number
+          format: float
+          description: Service uptime in seconds
+        components:
+          type: object
+          additionalProperties: true
+          description: Component health status
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - timestamp
+      properties:
+        error:
+          type: string
+          description: Error type
+          example: "ValidationError"
+        message:
+          type: string
+          description: Error message
+          example: "Invalid request parameters"
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error details
+        request_id:
+          type: string
+          description: Request ID for debugging
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token authentication
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: service
+    description: Service information and status
+  - name: health
+    description: Health check operations
+  - name: documents
+    description: Document ingestion and management
+  - name: search
+    description: Search operations
+  - name: collections
+    description: Collection management
+  - name: jobs
+    description: Asynchronous job management

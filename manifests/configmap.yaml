@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-search-service-config
+  namespace: servicenow-ai-poc
+  labels:
+    app: vector-search-service
+data:
+  # Database
+  POSTGRES_HOST: postgres-pgvector
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ragdb
+  POSTGRES_USER: raguser
+
+  # Full-Text Search
+  FTS_LANGUAGE: "english"
+  FTS_RANKING_NORMALIZATION: "32"
+
+  # Service
+  LOG_LEVEL: INFO
+  DEBUG: "false"
+  HOST: "0.0.0.0"
+  PORT: "8000"
+
+  # Database Pool (reduced to prevent OOM)
+  DB_POOL_SIZE: "5"
+  DB_MAX_OVERFLOW: "10"
+  DB_POOL_TIMEOUT: "30"
+
+  # Batch Processing (prevent OOM during ingestion)
+  MAX_BATCH_DOCUMENTS: "50"
+  BATCH_COMMIT_SIZE: "10"
+  MAX_DOCUMENT_SIZE_MB: "5"
+
+  # DEPRECATED: Embedding settings (kept for backward compatibility)
+  # DEFAULT_EMBEDDING_DIMENSION: "768"
+  # EMBEDDING_MODEL: nomic-embed-text-v1.5
+  # NOMIC_EMBED_TEXT_1_5_URL: https://api-atlas.nomic.ai
+  # NOMIC_DIMENSIONALITY: "768"

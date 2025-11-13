@@ -33,26 +33,16 @@ fi
 echo "✅ Prerequisites verified"
 echo ""
 
-echo "📦 Step 1: Creating BuildConfig and ImageStream..."
-oc apply -f manifests/buildconfig.yaml -n "$NAMESPACE"
-
-echo ""
-echo "🔨 Step 2: Building container image from source..."
-oc start-build vector-search-service \
-  --from-dir=. \
-  --follow \
-  -n "$NAMESPACE"
-
-echo ""
-echo "📦 Step 3: Deploying Vector Search Service..."
+echo "📦 Step 1: Deploying Vector Search Service..."
+echo "   Using pre-built image: quay.io/wjackson/vector-search-service:latest"
 oc apply -k manifests/ -n "$NAMESPACE"
 
 echo ""
-echo "⏳ Step 4: Waiting for deployment to be ready..."
+echo "⏳ Step 2: Waiting for deployment to be ready..."
 oc rollout status deployment/vector-search-service -n "$NAMESPACE" --timeout=5m
 
 echo ""
-echo "🔍 Step 5: Verifying service health..."
+echo "🔍 Step 3: Verifying service health..."
 ROUTE=$(oc get route vector-search-service -n "$NAMESPACE" -o jsonpath='{.spec.host}')
 echo "Route URL: https://$ROUTE"
 

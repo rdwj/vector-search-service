@@ -67,10 +67,19 @@ class DocumentProcessor:
         chunks = []
         start = 0
         chunk_index = 0
-        
+        iteration = 0
+        max_iterations = 1000  # Safety limit
+
         while start < len(content):
+            iteration += 1
+            if iteration > max_iterations:
+                logger.error(f"[CHUNK] Exceeded max iterations ({max_iterations}), breaking loop. start={start}, content_len={len(content)}")
+                break
+
+            logger.debug(f"[CHUNK] Iteration {iteration}: start={start}, chunk_index={chunk_index}")
             # Calculate end position
             end = min(start + chunk_size, len(content))
+            logger.debug(f"[CHUNK] end={end}")
             
             # Adjust end to avoid cutting words in the middle
             if end < len(content):
@@ -95,12 +104,20 @@ class DocumentProcessor:
                 )
                 chunks.append(chunk)
                 chunk_index += 1
-            
+
+            # If we've reached the end of content, we're done
+            if end >= len(content):
+                logger.debug(f"[CHUNK] Reached end of content: end={end}, content_len={len(content)}")
+                break
+
             # Move start position with overlap
+            old_start = start
             start = end - overlap
-            
-            # Prevent infinite loop
-            if start >= end:
+            logger.debug(f"[CHUNK] Moving forward: old_start={old_start}, new_start={start}, end={end}, overlap={overlap}")
+
+            # Prevent infinite loop - if start hasn't advanced, break
+            if start <= old_start:
+                logger.warning(f"[CHUNK] Start position not advancing: start={start}, old_start={old_start}")
                 break
         
         logger.debug(f"Split document into {len(chunks)} chunks")

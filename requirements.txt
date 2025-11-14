@@ -14,3 +14,5 @@ alembic>=1.12.0
 sqlalchemy>=2.0.0
 # numpy>=1.24.0  # REMOVED: No vector operations in Python
 # scikit-learn>=1.3.0  # REMOVED: No ML operations
+psutil>=5.9.0  # Memory profiling
+memory-profiler>=0.61.0  # Memory profiling

@@ -108,7 +108,8 @@ class PostgreSQLVectorStore:
             batch_size: Number of documents to commit per transaction (default 10)
         """
         try:
-            all_results = []
+            # Track count instead of accumulating all results (prevent OOM)
+            documents_added = 0
             total_docs = len(documents)
 
             # Process documents in batches to prevent OOM
@@ -154,17 +155,19 @@ class PostgreSQLVectorStore:
                     session.add_all(document_objects)
                     await session.commit()
 
-                    # Refresh objects to get IDs
-                    for doc in document_objects:
-                        await session.refresh(doc)
-
-                    batch_results = [doc.to_dict() for doc in document_objects]
-                    all_results.extend(batch_results)
+                    # Track count instead of accumulating results
+                    documents_added += len(batch_docs)
 
                     logger.info(f"Committed batch {batch_start//batch_size + 1}: {len(batch_docs)} documents to collection '{collection_name}'")
 
-            logger.info(f"Added total {len(all_results)} documents to collection '{collection_name}' (FTS mode, {total_docs//batch_size + 1} batches)")
-            return all_results
+                    # CRITICAL: Clear session to release memory
+                    session.expunge_all()
+
+            total_batches = (total_docs // batch_size) + (1 if total_docs % batch_size else 0)
+            logger.info(f"Added total {documents_added} documents to collection '{collection_name}' (FTS mode, {total_batches} batches)")
+
+            # Return summary instead of all document objects
+            return [{"documents_added": documents_added, "total_batches": total_batches}]
 
         except Exception as e:
             logger.error(f"Failed to add documents to collection '{collection_name}': {e}")

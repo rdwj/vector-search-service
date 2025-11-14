@@ -38,10 +38,10 @@ spec:
               key: POSTGRES_PASSWORD
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "200m"
+            memory: "512Mi"
+            cpu: "250m"
           limits:
-            memory: "768Mi"
+            memory: "2Gi"  # Increased from 768Mi to prevent OOM during document ingestion
             cpu: "500m"
         readinessProbe:
           httpGet:

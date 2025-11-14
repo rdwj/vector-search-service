@@ -51,7 +51,7 @@ class Settings(BaseSettings):
 
     # Batch Processing Settings (prevent OOM during ingestion)
     max_batch_documents: int = int(os.getenv("MAX_BATCH_DOCUMENTS", "50"))
-    batch_commit_size: int = int(os.getenv("BATCH_COMMIT_SIZE", "10"))
+    batch_commit_size: int = int(os.getenv("BATCH_COMMIT_SIZE", "5"))  # Reduced from 10 to prevent OOM
     max_document_size_mb: int = int(os.getenv("MAX_DOCUMENT_SIZE_MB", "5"))
     
     # Legacy compatibility
